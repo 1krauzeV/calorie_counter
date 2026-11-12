@@ -184,9 +184,26 @@
                         <td>{{ meal.name }}</td>
                         <td>{{ meal.weight }} г</td>
                         <td>{{ meal.calories|round(2) }} ккал</td>
-                        <td>
-                            <a href="/delete/{{ meal.id }}?selected_date={{ selected_date }}">Удалить</a>
-                        </td>
+
+<td>
+    <form
+        action="{{ url_for('delete_meal', meal_id=meal.id) }}"
+        method="post"
+        class="delete-form"
+        onsubmit="return confirm('Вы уверены, что хотите удалить эту запись?');"
+    >
+        <input
+            type="hidden"
+            name="selected_date"
+            value="{{ selected_date }}"
+        >
+
+        <button type="submit" class="delete-button">
+            Удалить
+        </button>
+    </form>
+</td>
+
                     </tr>
                 {% endfor %}
             {% else %}

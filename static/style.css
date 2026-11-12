@@ -460,4 +460,32 @@ a:hover {
     select {
         font-size: 16px;
     }
+
+/* Форма удаления записи */
+  .delete-form {
+    margin: 0;
+  }
+
+/* Кнопка удаления в таблице */
+  .delete-button {
+    margin: 0;
+    padding: 0;
+    border: none;
+    border-radius: 0;
+    background: transparent;
+    box-shadow: none;
+    color: var(--danger);
+    font-size: 15px;
+    font-weight: 700;
+    cursor: pointer;
+  }
+
+  .delete-button:hover {
+    background: transparent;
+    color: var(--danger-hover);
+    box-shadow: none;
+    transform: none;
+    text-decoration: underline;
+ }
+
 }

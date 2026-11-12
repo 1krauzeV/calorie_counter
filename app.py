@@ -281,17 +281,33 @@ def update_product(product_id):
     return redirect(f'/?selected_date={selected_date}')
 
 
-@app.route('/delete/<int:meal_id>')
+
+@app.route('/delete/<int:meal_id>', methods=['POST'])
 def delete_meal(meal_id):
-    selected_date = normalize_date(request.args.get('selected_date'))
+    # Получаем дату, за которую пользователь удаляет запись
+    selected_date = normalize_date(
+        request.form.get('selected_date')
+    )
 
     conn = get_db_connection()
-    conn.execute('DELETE FROM meals WHERE id = ?', (meal_id,))
+
+    # Удаляем запись только за выбранную дату
+    result = conn.execute(
+        'DELETE FROM meals WHERE id = ? AND meal_date = ?',
+        (meal_id, selected_date)
+    )
+
     conn.commit()
     conn.close()
 
-    flash('Запись удалена.', 'success')
+    # Показываем результат операции
+    if result.rowcount > 0:
+        flash('Запись успешно удалена.', 'success')
+    else:
+        flash('Запись не найдена.', 'warning')
+
     return redirect(f'/?selected_date={selected_date}')
+
 
 
 if __name__ == '__main__':
