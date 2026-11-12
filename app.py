@@ -1,16 +1,17 @@
 from flask import Flask, render_template, request, redirect, flash, session
 import sqlite3
 from datetime import date, datetime, timedelta
+from init_db import init_database, DB_PATH
+
 
 app = Flask(__name__)
 app.secret_key = 'calorie_counter_secret_key'
 
 
 def get_db_connection():
-    conn = sqlite3.connect('database.db')
+    conn = sqlite3.connect(DB_PATH)
     conn.row_factory = sqlite3.Row
     return conn
-
 
 def normalize_date(date_string):
     if not date_string:
@@ -89,7 +90,8 @@ def get_home_data(selected_date):
 
 
 ensure_db_setup()
-
+init_database()
+ensure_db_setup()
 
 @app.route('/')
 def index():
