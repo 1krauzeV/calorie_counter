@@ -2,13 +2,14 @@ from flask import Flask, render_template, request, redirect, flash, session
 import sqlite3
 from datetime import date, datetime, timedelta
 from init_db import init_database, DB_PATH
-
+from math import isfinite
 
 app = Flask(__name__)
 app.secret_key = 'calorie_counter_secret_key'
 
 
 def get_db_connection():
+    """Создаёт подключение к базе данных SQLite."""
     conn = sqlite3.connect(DB_PATH)
     conn.row_factory = sqlite3.Row
     return conn
@@ -24,6 +25,7 @@ def normalize_date(date_string):
 
 
 def ensure_db_setup():
+    """Создаёт таблицу настроек и устанавливает начальную цель."""
     conn = get_db_connection()
 
     conn.execute('''
@@ -48,6 +50,7 @@ def ensure_db_setup():
 
 
 def get_home_data(selected_date):
+    """Получает из базы данные для отображения главной страницы."""
     conn = get_db_connection()
 
     products = conn.execute(
@@ -95,6 +98,8 @@ ensure_db_setup()
 
 @app.route('/')
 def index():
+    """Формирует главную страницу для выбранной даты."""
+
     selected_date = normalize_date(request.args.get('selected_date'))
     products, meals, total_calories, daily_goal, remaining, history = get_home_data(selected_date)
 
@@ -129,13 +134,18 @@ def index():
 
 @app.route('/set_goal', methods=['POST'])
 def set_goal():
+    """Проверяет и сохраняет дневную норму калорий."""
+
     selected_date = normalize_date(request.form.get('selected_date'))
 
     try:
-        daily_goal = float(request.form['daily_goal'])
-        if daily_goal <= 0:
+        daily_goal = float(request.form.get('daily_goal', ''))
+
+        # Цель должна быть положительным конечным числом
+        if not isfinite(daily_goal) or daily_goal <= 0:
             raise ValueError
-    except ValueError:
+
+    except (ValueError, TypeError):
         flash('Введите корректную цель по калориям.', 'error')
         return redirect(f'/?selected_date={selected_date}')
 
@@ -153,16 +163,23 @@ def set_goal():
 
 @app.route('/add', methods=['POST'])
 def add_meal():
+    """Рассчитывает калорийность и добавляет запись о приёме пищи."""
+
     selected_date = normalize_date(request.form.get('selected_date'))
 
+
     try:
-        product_id = int(request.form['product_id'])
-        weight = float(request.form['weight'])
-        if weight <= 0:
+        product_id = int(request.form.get('product_id', ''))
+        weight = float(request.form.get('weight', ''))
+
+        # Проверяем, что продукт выбран, а вес положительный
+        if product_id <= 0 or not isfinite(weight) or weight <= 0:
             raise ValueError
-    except ValueError:
+
+    except (ValueError, TypeError):
         flash('Введите корректный вес продукта.', 'error')
         return redirect(f'/?selected_date={selected_date}')
+
 
     conn = get_db_connection()
 
@@ -192,15 +209,20 @@ def add_meal():
 
 @app.route('/add_product', methods=['POST'])
 def add_product():
+    """Добавляет продукт или предлагает обновить существующий."""
+
     selected_date = normalize_date(request.form.get('selected_date'))
-    name = request.form['name'].strip()
+    name = request.form.get('name', '').strip()
 
     try:
-        calories_per_100g = float(request.form['calories_per_100g'])
-        if calories_per_100g < 0:
+        new_calories = float(request.form.get('new_calories', ''))
+
+        # Запрещаем отрицательные и неконечные значения
+        if not isfinite(new_calories) or new_calories < 0:
             raise ValueError
-    except ValueError:
-        flash('Введите корректную калорийность.', 'error')
+
+    except (ValueError, TypeError):
+        flash('Новая калорийность указана неверно.', 'error')
         return redirect(f'/?selected_date={selected_date}')
 
     if not name:
@@ -250,6 +272,8 @@ def add_product():
 
 @app.route('/update_product/<int:product_id>', methods=['POST'])
 def update_product(product_id):
+    """Обновляет калорийность продукта и пересчитывает записи."""
+
     selected_date = normalize_date(request.form.get('selected_date'))
 
     try:
@@ -284,6 +308,8 @@ def update_product(product_id):
 
 @app.route('/delete/<int:meal_id>', methods=['POST'])
 def delete_meal(meal_id):
+    """Удаляет запись о приёме пищи за выбранную дату."""
+
     # Получаем дату, за которую пользователь удаляет запись
     selected_date = normalize_date(
         request.form.get('selected_date')
