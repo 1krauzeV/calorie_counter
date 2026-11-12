@@ -92,7 +92,7 @@ def get_home_data(selected_date):
     return products, meals, total_calories, daily_goal, remaining, history
 
 
-ensure_db_setup()
+
 init_database()
 ensure_db_setup()
 
