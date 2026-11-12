@@ -132,6 +132,7 @@ def index():
         duplicate_data=duplicate_data
     )
 
+
 @app.route('/set_goal', methods=['POST'])
 def set_goal():
     """Проверяет и сохраняет дневную норму калорий."""
@@ -149,17 +150,21 @@ def set_goal():
         flash('Введите корректную цель по калориям.', 'error')
         return redirect(f'/?selected_date={selected_date}')
 
+    # Подключаемся к базе данных
     conn = get_db_connection()
+
+    # Обновляем дневную цель
     conn.execute(
         "UPDATE settings SET value = ? WHERE key = 'daily_goal'",
         (str(daily_goal),)
     )
+
     conn.commit()
     conn.close()
 
+    # Уведомляем пользователя об успешном изменении
     flash(f'Новая дневная цель: {daily_goal:.0f} ккал.', 'success')
     return redirect(f'/?selected_date={selected_date}')
-
 
 @app.route('/add', methods=['POST'])
 def add_meal():
@@ -207,58 +212,69 @@ def add_meal():
     return redirect(f'/?selected_date={selected_date}')
 
 
+
 @app.route('/add_product', methods=['POST'])
 def add_product():
-    """Добавляет продукт или предлагает обновить существующий."""
+    """Добавляет новый продукт или предлагает обновить существующий."""
 
     selected_date = normalize_date(request.form.get('selected_date'))
     name = request.form.get('name', '').strip()
 
+    # Проверяем правильность введённой калорийности
     try:
-        new_calories = float(request.form.get('new_calories', ''))
+        calories_per_100g = float(
+            request.form.get('calories_per_100g', '')
+        )
 
-        # Запрещаем отрицательные и неконечные значения
-        if not isfinite(new_calories) or new_calories < 0:
+        if not isfinite(calories_per_100g) or calories_per_100g < 0:
             raise ValueError
 
     except (ValueError, TypeError):
-        flash('Новая калорийность указана неверно.', 'error')
+        flash('Введите корректную калорийность.', 'error')
         return redirect(f'/?selected_date={selected_date}')
 
+    # Название продукта не должно быть пустым
     if not name:
         flash('Название продукта не может быть пустым.', 'error')
         return redirect(f'/?selected_date={selected_date}')
 
     conn = get_db_connection()
 
+    # Проверяем, существует ли продукт с таким названием
     existing_product = conn.execute(
         'SELECT * FROM products WHERE LOWER(name) = LOWER(?)',
         (name,)
     ).fetchone()
 
+    # Если продукта нет, добавляем его в базу данных
     if existing_product is None:
         conn.execute('''
             INSERT INTO products (name, calories_per_100g)
             VALUES (?, ?)
         ''', (name, calories_per_100g))
+
         conn.commit()
         conn.close()
 
         flash(f'Продукт "{name}" успешно добавлен.', 'success')
         return redirect(f'/?selected_date={selected_date}')
 
+    # Если продукт существует, сравниваем калорийность
     current_calories = float(existing_product['calories_per_100g'])
 
     if abs(current_calories - calories_per_100g) < 0.0001:
         conn.close()
+
         flash(
-            f'Продукт "{existing_product["name"]}" уже существует с такой же калорийностью.',
+            f'Продукт "{existing_product["name"]}" '
+            f'уже существует с такой же калорийностью.',
             'warning'
         )
         return redirect(f'/?selected_date={selected_date}')
 
     conn.close()
 
+    # Сохраняем данные для подтверждения изменения калорийности
     session['duplicate_data'] = {
         'id': existing_product['id'],
         'name': existing_product['name'],
@@ -270,40 +286,56 @@ def add_product():
     return redirect(f'/?selected_date={selected_date}')
 
 
+
 @app.route('/update_product/<int:product_id>', methods=['POST'])
 def update_product(product_id):
-    """Обновляет калорийность продукта и пересчитывает записи."""
+    """Обновляет калорийность продукта и пересчитывает сохранённые записи."""
 
     selected_date = normalize_date(request.form.get('selected_date'))
 
+    # Проверяем корректность новой калорийности
     try:
-        new_calories = float(request.form['new_calories'])
-        if new_calories < 0:
+        new_calories = float(request.form.get('new_calories', ''))
+
+        if not isfinite(new_calories) or new_calories < 0:
             raise ValueError
-    except ValueError:
+
+    except (ValueError, TypeError):
         flash('Новая калорийность указана неверно.', 'error')
         return redirect(f'/?selected_date={selected_date}')
 
     conn = get_db_connection()
 
-    conn.execute('''
+    # Обновляем калорийность продукта в базе данных
+    result = conn.execute('''
         UPDATE products
         SET calories_per_100g = ?
         WHERE id = ?
     ''', (new_calories, product_id))
 
+    # Проверяем, был ли найден продукт
+    if result.rowcount == 0:
+        conn.close()
+        flash('Продукт не найден.', 'error')
+        return redirect(f'/?selected_date={selected_date}')
+
+    # Пересчитываем калории во всех сохранённых записях
     conn.execute('''
         UPDATE meals
         SET calories = (weight / 100.0) * ?
         WHERE product_id = ?
     ''', (new_calories, product_id))
 
+    # Сохраняем изменения и закрываем соединение
     conn.commit()
     conn.close()
 
-    flash('Пищевая ценность обновлена, сохранённые записи пересчитаны.', 'success')
-    return redirect(f'/?selected_date={selected_date}')
+    flash(
+        'Калорийность продукта обновлена, сохранённые записи пересчитаны.',
+        'success'
+    )
 
+    return redirect(f'/?selected_date={selected_date}')
 
 
 @app.route('/delete/<int:meal_id>', methods=['POST'])
