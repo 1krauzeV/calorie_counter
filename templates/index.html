@@ -1,0 +1,274 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <title>Счетчик калорий</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+</head>
+<body>
+    <div class="container">
+        <div class="top-panel">
+            <div>
+                <h1>Счетчик калорий</h1>
+                <p>Следи за рационом, добавляй продукты и смотри статистику по дням.</p>
+            </div>
+
+            <div>
+                <form action="/" method="get" class="date-form">
+                    <label for="selected_date">Выбери дату:</label>
+                    <div class="date-form-row">
+                        <input
+                            type="date"
+                            id="selected_date"
+                            name="selected_date"
+                            value="{{ selected_date }}"
+                            max="{{ today }}"
+                            required
+                        >
+                        <button type="submit">Показать</button>
+                    </div>
+                </form>
+
+                <div class="quick-date-buttons">
+                    <form action="/" method="get" class="quick-date-form">
+                        <input type="hidden" name="selected_date" value="{{ today }}">
+                        <button type="submit" class="quick-date-btn">Сегодня</button>
+                    </form>
+
+                    <form action="/" method="get" class="quick-date-form">
+                        <input type="hidden" name="selected_date" value="{{ yesterday }}">
+                        <button type="submit" class="quick-date-btn">Вчера</button>
+                    </form>
+                </div>
+            </div>
+        </div>
+
+        <p>Сейчас открыта дата: <strong>{{ selected_date }}</strong></p>
+
+        {% with messages = get_flashed_messages(with_categories=true) %}
+            {% if messages %}
+                {% for category, message in messages %}
+                    <div class="message {{ category }}">
+                        <span class="message-icon">
+                            {% if category == 'success' %}
+                                ✅
+                            {% elif category == 'warning' %}
+                                ⚠️
+                            {% elif category == 'error' %}
+                                ❌
+                            {% endif %}
+                        </span>
+                        <span class="message-text">{{ message }}</span>
+                    </div>
+                {% endfor %}
+            {% endif %}
+        {% endwith %}
+
+        <div class="stats-grid">
+            <div class="stat-card">
+                <span class="stat-label">Съедено</span>
+                <span class="stat-value">{{ total_calories|round(2) }} ккал</span>
+            </div>
+
+            <div class="stat-card">
+                <span class="stat-label">Цель на день</span>
+                <span class="stat-value">{{ daily_goal|round(0) }} ккал</span>
+            </div>
+
+            <div class="stat-card {% if exceeded_calories > 0 %}danger{% else %}success{% endif %}">
+                <span class="stat-label">
+                    {% if exceeded_calories > 0 %}
+                        Превышение
+                    {% else %}
+                        Осталось
+                    {% endif %}
+                </span>
+                <span class="stat-value">
+                    {% if exceeded_calories > 0 %}
+                        {{ exceeded_calories|round(2) }} ккал
+                    {% else %}
+                        {{ remaining_calories|round(2) }} ккал
+                    {% endif %}
+                </span>
+            </div>
+        </div>
+
+        <div class="progress-card">
+            <div class="progress-header">
+                <span>Прогресс по цели</span>
+                <span>{{ progress_percent|round(1) }}%</span>
+            </div>
+
+            <div class="progress-bar">
+    <div
+        class="progress-fill"
+        id="progress-fill"
+        data-progress="{{ progress_percent|round(1) }}"
+    ></div>
+</div>
+
+            <p class="progress-note">
+                {{ total_calories|round(2) }} из {{ daily_goal|round(0) }} ккал
+            </p>
+        </div>
+
+        <h2>Задать дневную цель</h2>
+        <form action="/set_goal" method="post" class="form-box">
+            <input type="hidden" name="selected_date" value="{{ selected_date }}">
+
+            <label for="daily_goal">Цель по калориям на день:</label>
+            <input
+                type="number"
+                id="daily_goal"
+                name="daily_goal"
+                step="1"
+                min="1"
+                value="{{ daily_goal|round(0) }}"
+                required
+            >
+
+            <button type="submit">Сохранить цель</button>
+        </form>
+
+        <h2>Добавить съеденный продукт</h2>
+        <form action="/add" method="post" class="form-box">
+            <input type="hidden" name="selected_date" value="{{ selected_date }}">
+
+            <label for="product_id">Выбери продукт:</label>
+            <select id="product_id" name="product_id" required>
+                {% for product in products %}
+                    <option value="{{ product.id }}">
+                        {{ product.name }} ({{ product.calories_per_100g }} ккал / 100 г)
+                    </option>
+                {% endfor %}
+            </select>
+
+            <label for="weight">Вес (граммы):</label>
+            <input type="number" id="weight" name="weight" step="0.1" min="1" required>
+
+            <button type="submit">Добавить</button>
+        </form>
+
+        <h2>Добавить новый продукт</h2>
+        <form action="/add_product" method="post" class="form-box">
+            <input type="hidden" name="selected_date" value="{{ selected_date }}">
+
+            <label for="name">Название продукта:</label>
+            <input type="text" id="name" name="name" required>
+
+            <label for="calories_per_100g">Калории на 100 г:</label>
+            <input
+                type="number"
+                id="calories_per_100g"
+                name="calories_per_100g"
+                step="0.1"
+                min="0"
+                required
+            >
+
+            <button type="submit">Сохранить продукт</button>
+        </form>
+
+        <h2>Съедено за выбранный день</h2>
+        <table>
+            <tr>
+                <th>Продукт</th>
+                <th>Вес</th>
+                <th>Калории</th>
+                <th>Действие</th>
+            </tr>
+
+            {% if meals %}
+                {% for meal in meals %}
+                    <tr>
+                        <td>{{ meal.name }}</td>
+                        <td>{{ meal.weight }} г</td>
+                        <td>{{ meal.calories|round(2) }} ккал</td>
+                        <td>
+                            <a href="/delete/{{ meal.id }}?selected_date={{ selected_date }}">Удалить</a>
+                        </td>
+                    </tr>
+                {% endfor %}
+            {% else %}
+                <tr>
+                    <td colspan="4">За эту дату записей пока нет.</td>
+                </tr>
+            {% endif %}
+        </table>
+
+        <h2>Последние 7 дней</h2>
+        {% if history %}
+            <table>
+                <tr>
+                    <th>Дата</th>
+                    <th>Всего калорий</th>
+                    <th>Открыть</th>
+                </tr>
+
+                {% for day in history %}
+                    <tr>
+                        <td>{{ day.meal_date }}</td>
+                        <td>{{ day.total|round(2) }} ккал</td>
+                        <td>
+                            <a class="history-link" href="/?selected_date={{ day.meal_date }}">
+                                Посмотреть
+                            </a>
+                        </td>
+                    </tr>
+                {% endfor %}
+            </table>
+        {% else %}
+            <p class="empty-text">Пока нет сохранённых данных за прошлые дни.</p>
+        {% endif %}
+    </div>
+
+    <script>
+    const progressFill = document.getElementById('progress-fill');
+
+    if (progressFill) {
+        const progressValue = progressFill.dataset.progress;
+        progressFill.style.width = progressValue + '%';
+    }
+</script>
+
+    {% if duplicate_data %}
+        <div
+            id="duplicate-data"
+            data-product-name="{{ duplicate_data.name }}"
+            data-current-calories="{{ duplicate_data.current_calories|round(2) }}"
+            data-new-calories="{{ duplicate_data.new_calories|round(2) }}"
+        ></div>
+
+        <form
+            id="update-product-form"
+            action="/update_product/{{ duplicate_data.id }}"
+            method="post"
+            style="display: none;"
+        >
+            <input type="hidden" name="new_calories" value="{{ duplicate_data.new_calories }}">
+            <input type="hidden" name="selected_date" value="{{ duplicate_data.selected_date }}">
+        </form>
+
+        <script>
+            const duplicateData = document.getElementById('duplicate-data');
+
+            if (duplicateData) {
+                const productName = duplicateData.dataset.productName;
+                const currentCalories = duplicateData.dataset.currentCalories;
+                const newCalories = duplicateData.dataset.newCalories;
+
+                const shouldUpdate = confirm(
+                    'Продукт «' + productName + '» уже существует.\n' +
+                    'Текущая калорийность: ' + currentCalories + ' ккал/100 г.\n' +
+                    'Новая калорийность: ' + newCalories + ' ккал/100 г.\n\n' +
+                    'Обновить пищевую ценность и пересчитать сохранённые записи?'
+                );
+
+                if (shouldUpdate) {
+                    document.getElementById('update-product-form').submit();
+                }
+            }
+        </script>
+    {% endif %}
+</body>
+</html>
